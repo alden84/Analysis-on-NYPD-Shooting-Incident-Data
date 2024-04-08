@@ -1,6 +1,6 @@
 ---
 title: "NYPD Shooting Incident Data Report"
-author: "Lin Azhi"
+author: "Alden Lin Azhi"
 date: "2024-03-02"
 output: pdf_document
 ---
