@@ -1,0 +1,107 @@
+---
+title: "NYPD Shooting Incident Data Report"
+author: "Lin Azhi"
+date: "2024-03-02"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_lib}
+library(tidyverse)
+```
+
+## What is this?
+
+This document uses NYPD Shooting Incident Data (Historic) posted on below site to do some data analysis work, as part of CU Boulder's Data Science as A Field course project work.
+
+https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic
+
+## Step 1 - Important the data in a reproducible manner
+
+```{r import_data}
+url = "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+nypd_shooting = read.csv(url)
+
+```
+
+## Step 2 - Cleaning, Analysis and Visualization
+
+### Most Dangeous Hours and Least Dangeous Hours
+
+I would like to gain some insights which hours the city is safer and which hours less. The analysis below indicates that mid-night is the the most dangerous while early in the morning safest.
+
+```{r hour_trend}
+#Wrangling of data to get number of cases by hour
+nypd_shooting <- nypd_shooting %>% mutate(OCCUR_TIME = hms(OCCUR_TIME))
+cases_by_hour <- nypd_shooting %>% 
+  mutate(HOUR=hour(OCCUR_TIME)) %>% 
+  group_by(HOUR) %>% 
+  summarize(count=n())
+
+#plot the data
+cases_by_hour %>%
+ ggplot() +
+ geom_point(aes(HOUR,count))
+```
+### Perpetrator Age Groups
+
+Now I would like to know which age groups are more violent and which group least. This is done by analyzing the age group of perpetrators in the shooting cases. The chart shows that 18~24 is the most violent group while 65-plus is least violent, which is true to common sense. 
+
+
+```{r perp_age_group_analysis}
+nypd_shooting <- nypd_shooting %>% mutate(PERP_AGE_GROUP = ifelse(PERP_AGE_GROUP %in% c("(null)","1020","224","940",""),"UNKNOWN",PERP_AGE_GROUP))
+
+nypd_shooting %>% group_by(PERP_AGE_GROUP) %>%  summarize(count=n()) %>%
+  ggplot(aes(x=PERP_AGE_GROUP,y=count)) +
+  geom_bar(stat="identity")
+```
+
+But wait, the number of UNKNOWN perpetrator age group is so high? It's almost twice the amount of 18~24 cases. This pretty much means there is a significant amount of cases with perpetrator identify unidentified. Is it always the case every year or just for certain years?
+
+Let me try to find out:
+
+
+```{r}
+
+perp_age_trend <- nypd_shooting %>% 
+  mutate(OCCUR_DATE=mdy(OCCUR_DATE)) %>%
+  mutate(OCCUR_YEAR = year(OCCUR_DATE)) %>%
+  group_by(OCCUR_YEAR,PERP_AGE_GROUP) %>% summarize(COUNT = n(),.groups = "drop")
+
+
+perp_age_trend %>%
+ ggplot(aes(OCCUR_YEAR,COUNT)) +
+ geom_line(aes(color=PERP_AGE_GROUP))
+
+```
+
+From the above chart, we can safely say that for every year the number of unidentified perpetrators takes up a significant part of total shooting cases in New York.
+
+Can we say the higher the total number of cases, the more cases of unidentified perpetrator? Let's find out using linear modeling and the answer is yes.
+
+```{r}
+# get total number of cases for each year
+cases_by_year_total <- perp_age_trend %>% group_by(OCCUR_YEAR) %>%  summarize(TOTAL_CASES=sum(COUNT))
+
+# get number of cases with unknown perpetrators for each year
+cases_by_year_unknown_perp <- perp_age_trend %>% filter(PERP_AGE_GROUP == "UNKNOWN") %>% mutate(UNKNOWN_PERP_CASES =COUNT) %>% select(OCCUR_YEAR,UNKNOWN_PERP_CASES)
+
+#merge the two data frames above 
+cases_by_year <- full_join(cases_by_year_total,cases_by_year_unknown_perp)
+
+#all set for linear modeling
+mod <- lm(UNKNOWN_PERP_CASES~TOTAL_CASES,data=cases_by_year)
+
+# prediction based on the model created
+cases_by_year <- cases_by_year%>% mutate(pred = predict(mod)) 
+
+#visualization
+cases_by_year %>%
+  ggplot() +
+  geom_point(aes(x = TOTAL_CASES, y = UNKNOWN_PERP_CASES, color = "Actual")) +
+  geom_line(aes(x = TOTAL_CASES, y = pred, color = "Predicted")) + 
+  scale_color_manual(values = c("Actual" = "blue", "Predicted" = "red"))
+```
