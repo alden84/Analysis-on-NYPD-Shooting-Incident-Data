@@ -2,7 +2,7 @@
 title: "NYPD Shooting Incident Data Report"
 author: "Alden Lin Azhi"
 date: "2024-03-02"
-output: pdf_document
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -15,7 +15,7 @@ library(tidyverse)
 
 ## What is this?
 
-This document uses NYPD Shooting Incident Data (Historic) posted on below site to do some data analysis work, as part of CU Boulder's Data Science as A Field course project work.
+This document uses NYPD Shooting Incident Data (Historic) posted on below site to do some data analysis work, as part of CU Boulder's Data Science as A Field course final project work.
 
 https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic
 
@@ -39,23 +39,26 @@ nypd_shooting <- nypd_shooting %>% mutate(OCCUR_TIME = hms(OCCUR_TIME))
 cases_by_hour <- nypd_shooting %>% 
   mutate(HOUR=hour(OCCUR_TIME)) %>% 
   group_by(HOUR) %>% 
-  summarize(count=n())
+  summarize(Cases=n())
+
+# Fill in missing hours with zero cases
+cases_by_hour <- complete(cases_by_hour, HOUR = 0:23, fill = list(Cases = 0))
 
 #plot the data
 cases_by_hour %>%
  ggplot() +
- geom_point(aes(HOUR,count))
+ geom_point(aes(HOUR,Cases),color='blue')
 ```
-### Perpetrator Age Groups
+### Perpetrator Age Group Analysis
 
-Now I would like to know which age groups are more violent and which group least. This is done by analyzing the age group of perpetrators in the shooting cases. The chart shows that 18~24 is the most violent group while 65-plus is least violent, which is true to common sense. 
+Now I would like to know which age groups are more violent and which group least. This is done by analyzing the age group of perpetrators in the shooting cases. I'm being biased about age group here. But the data reveals that 18~24 is the most violent group while 65-plus is least violent, which I belief is true to general belief (or bias). 
 
 
 ```{r perp_age_group_analysis}
 nypd_shooting <- nypd_shooting %>% mutate(PERP_AGE_GROUP = ifelse(PERP_AGE_GROUP %in% c("(null)","1020","224","940",""),"UNKNOWN",PERP_AGE_GROUP))
 
-nypd_shooting %>% group_by(PERP_AGE_GROUP) %>%  summarize(count=n()) %>%
-  ggplot(aes(x=PERP_AGE_GROUP,y=count)) +
+nypd_shooting %>% group_by(PERP_AGE_GROUP) %>%  summarize(CASES=n()) %>%
+  ggplot(aes(x=PERP_AGE_GROUP,y=CASES,fill=PERP_AGE_GROUP)) +
   geom_bar(stat="identity")
 ```
 
@@ -69,11 +72,11 @@ Let me try to find out:
 perp_age_trend <- nypd_shooting %>% 
   mutate(OCCUR_DATE=mdy(OCCUR_DATE)) %>%
   mutate(OCCUR_YEAR = year(OCCUR_DATE)) %>%
-  group_by(OCCUR_YEAR,PERP_AGE_GROUP) %>% summarize(COUNT = n(),.groups = "drop")
+  group_by(OCCUR_YEAR,PERP_AGE_GROUP) %>% summarize(CASES = n(),.groups = "drop")
 
 
 perp_age_trend %>%
- ggplot(aes(OCCUR_YEAR,COUNT)) +
+ ggplot(aes(OCCUR_YEAR,CASES)) +
  geom_line(aes(color=PERP_AGE_GROUP))
 
 ```
@@ -84,10 +87,10 @@ Can we say the higher the total number of cases, the more cases of unidentified 
 
 ```{r}
 # get total number of cases for each year
-cases_by_year_total <- perp_age_trend %>% group_by(OCCUR_YEAR) %>%  summarize(TOTAL_CASES=sum(COUNT))
+cases_by_year_total <- perp_age_trend %>% group_by(OCCUR_YEAR) %>%  summarize(TOTAL_CASES=sum(CASES))
 
 # get number of cases with unknown perpetrators for each year
-cases_by_year_unknown_perp <- perp_age_trend %>% filter(PERP_AGE_GROUP == "UNKNOWN") %>% mutate(UNKNOWN_PERP_CASES =COUNT) %>% select(OCCUR_YEAR,UNKNOWN_PERP_CASES)
+cases_by_year_unknown_perp <- perp_age_trend %>% filter(PERP_AGE_GROUP == "UNKNOWN") %>% mutate(UNKNOWN_PERP_CASES =CASES) %>% select(OCCUR_YEAR,UNKNOWN_PERP_CASES)
 
 #merge the two data frames above 
 cases_by_year <- full_join(cases_by_year_total,cases_by_year_unknown_perp)
