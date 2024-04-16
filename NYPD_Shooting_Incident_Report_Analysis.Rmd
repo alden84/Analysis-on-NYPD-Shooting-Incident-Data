@@ -108,3 +108,8 @@ cases_by_year %>%
   geom_line(aes(x = TOTAL_CASES, y = pred, color = "Predicted")) + 
   scale_color_manual(values = c("Actual" = "blue", "Predicted" = "red"))
 ```
+
+## Show Session Info
+``` {r info}
+sessionInfo()
+```
